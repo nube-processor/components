@@ -114,7 +114,7 @@ checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
 [[package]]
 name = "isa"
 version = "0.1.0"
-source = "git+https://github.com/nube-processor/isa#d5d2fc88302c5d1f8754bc74f0cce0e1d929dd8a"
+source = "git+https://github.com/nube-simulator/isa#528742c601668d6f2ab6264ed16e4364c7030354"
 dependencies = [
  "thiserror",
 ]
