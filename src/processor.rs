@@ -24,7 +24,7 @@ pub enum ProcessorError {
 }
 
 /// Estrutura que representa um processador.
-#[derive(Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Processor {
     registers: [usize; NUMBER_REGISTERS],
 
@@ -46,6 +46,7 @@ impl Processor {
     pub fn new() -> Self {
         Self::default()
     }
+
     /// Retorna o valor do registrador `number`.
     ///
     /// # Erros
@@ -178,7 +179,7 @@ impl Processor {
             }
 
             Instruction::LOADI => {
-                self.set_reg(self.rx, self.reg(self.ry)?)?;
+                self.set_reg(self.rx, *ram.get(self.reg(self.ry)?)?)?;
             }
 
             Instruction::STORE => {
@@ -282,4 +283,202 @@ impl Processor {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+
+    use std::usize;
+
+    use isa::set_bits;
+
+    // Rx: 7..=9
+    // Ry: 4..=6
+    // Rz: 1..=3
+
+    use super::*;
+
+    trait Regions {
+        fn rx(&self, v: usize) -> usize;
+        fn ry(&self, v: usize) -> usize;
+        fn rz(&self, v: usize) -> usize;
+    }
+
+    impl Regions for usize {
+        fn rx(&self, v: usize) -> usize {
+            set_bits(*self, v, 7..=9)
+        }
+
+        fn ry(&self, v: usize) -> usize {
+            set_bits(*self, v, 4..=6)
+        }
+
+        fn rz(&self, v: usize) -> usize {
+            set_bits(*self, v, 1..=3)
+        }
+    }
+
+    fn components() -> Components {
+        let ram = RAM::with_capacity(10);
+        let mut comp = Components::new();
+        comp.insert(TypeId::of::<RAM>(), Box::new(ram));
+        comp
+    }
+
+    fn ram(components: &mut Components) -> &mut RAM {
+        let typeid = TypeId::of::<RAM>();
+        let any = components
+            .get_mut(&typeid)
+            .expect("Nenhuma RAM foi encontrada.");
+        any.downcast_mut::<RAM>().unwrap()
+    }
+
+    #[test]
+    // LOAD R3, 1
+    fn inst_load() {
+        let mut comp = components();
+        let ram = ram(&mut comp);
+        let inst = isa::Instruction::LOAD.mask().rx(3);
+        let _ = ram.set(0, inst);
+        let _ = ram.set(1, 2);
+        let _ = ram.set(2, 100);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.pc = 2;
+        default.rx = 3;
+        default.registers[3] = 100;
+
+        let mut proc = Processor::new();
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+    }
+
+    #[test]
+    // LOAD R3, #100
+    fn inst_loadn() {
+        let mut comp = components();
+        let ram = ram(&mut comp);
+        let inst = isa::Instruction::LOADN.mask().rx(3);
+        let _ = ram.set(0, inst);
+        let _ = ram.set(1, 100);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.pc = 2;
+        default.rx = 3;
+        default.registers[3] = 100;
+
+        let mut proc = Processor::new();
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+    }
+
+    #[test]
+    // LOADI R3, R1
+    fn inst_loadi() {
+        let mut comp = components();
+        let ram = ram(&mut comp);
+        let inst = isa::Instruction::LOADI.mask().rx(3).ry(1);
+        let _ = ram.set(0, inst);
+        let _ = ram.set(1, 100);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.pc = 1;
+        default.rx = 3;
+        default.ry = 1;
+        default.registers[3] = 100;
+        default.registers[1] = 1;
+
+        let mut proc = Processor::new();
+        proc.registers[1] = 1;
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+    }
+
+    #[test]
+    // STORE 2, R3
+    fn inst_store() {
+        let mut comp = components();
+        let r = ram(&mut comp);
+        let inst = isa::Instruction::STORE.mask().rx(3);
+        let _ = r.set(0, inst);
+        let _ = r.set(1, 2);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.pc = 2;
+        default.rx = 3;
+        default.registers[3] = 100;
+
+        let mut proc = Processor::new();
+        proc.registers[3] = 100;
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+        let r = ram(&mut comp);
+        assert_eq!(*r.get(2).unwrap(), 100);
+    }
+
+    #[test]
+    // STOREN 3, #100
+    fn inst_storen() {
+        let mut comp = components();
+        let r = ram(&mut comp);
+        let inst = isa::Instruction::STOREN.mask();
+        let _ = r.set(0, inst);
+        let _ = r.set(1, 3);
+        let _ = r.set(2, 100);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.pc = 3;
+
+        let mut proc = Processor::new();
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+        let r = ram(&mut comp);
+        assert_eq!(*r.get(3).unwrap(), 100);
+    }
+
+    #[test]
+    // STOREN R3, R2
+    fn inst_storei() {
+        let mut comp = components();
+        let r = ram(&mut comp);
+        let inst = isa::Instruction::STOREI.mask().rx(3).ry(2);
+        let _ = r.set(0, inst);
+        let _ = r.set(1, 100);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.rx = 3;
+        default.ry = 2;
+        default.pc = 1;
+        default.registers[3] = 1;
+        default.registers[2] = 100;
+
+        let mut proc = Processor::new();
+
+        proc.registers[3] = 1;
+        proc.registers[2] = 100;
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+        let r = ram(&mut comp);
+        assert_eq!(*r.get(1).unwrap(), 100);
+    }
+}
