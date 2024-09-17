@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 log = "0.4.22"
 env_logger = "0.11.3"
-isa = { git = "https://github.com/icmc-processor/isa" }
+isa = { git = "https://github.com/nube-processor/isa" }
 thiserror = "1.0.63"
