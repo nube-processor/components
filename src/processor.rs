@@ -196,14 +196,25 @@ impl Processor {
                 ram.set(self.reg(self.rx)?, self.reg(self.ry)?)?;
             }
 
-            Instruction::MOV => todo!(),
+            Instruction::MOV => match isa::bits(self.ir, 0..=1) {
+                0 => self.set_reg(self.rx, self.reg(self.ry)?)?,
+                1 => self.set_reg(self.rx, self.sp)?,
+                _ => self.sp = self.reg(self.rx)?,
+            },
+
             Instruction::INPUT => todo!(),
             Instruction::OUTPUT => todo!(),
             Instruction::OUTCHAR => todo!(),
             Instruction::INCHAR => todo!(),
             Instruction::SOUND => todo!(),
-            Instruction::ADD => todo!(),
-            Instruction::ADDC => todo!(),
+
+            Instruction::ADD | Instruction::ADDC => {
+                self.set_reg(self.rx, self.reg(self.ry)? + self.reg(self.rz)?)?;
+
+                if self.instruction == Instruction::ADDC {}
+                todo!()
+            }
+
             Instruction::SUB => todo!(),
             Instruction::SUBC => todo!(),
             Instruction::MUL => todo!(),
@@ -299,6 +310,7 @@ mod tests {
         fn rx(&self, v: usize) -> usize;
         fn ry(&self, v: usize) -> usize;
         fn rz(&self, v: usize) -> usize;
+        fn lsb(&self, v: usize) -> usize;
     }
 
     impl Regions for usize {
@@ -312,6 +324,10 @@ mod tests {
 
         fn rz(&self, v: usize) -> usize {
             set_bits(*self, v, 1..=3)
+        }
+
+        fn lsb(&self, v: usize) -> usize {
+            set_bits(*self, v, 0..=0)
         }
     }
 
@@ -480,5 +496,79 @@ mod tests {
         assert_eq!(proc, default);
         let r = ram(&mut comp);
         assert_eq!(*r.get(1).unwrap(), 100);
+    }
+
+    #[test]
+    // MOV R3, R2
+    fn inst_mov_rr() {
+        let mut comp = components();
+        let r = ram(&mut comp);
+        let inst = isa::Instruction::MOV.mask().rx(3).ry(2);
+        let _ = r.set(0, inst);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.rx = 3;
+        default.ry = 2;
+        default.pc = 1;
+        default.registers[3] = 100;
+        default.registers[2] = 100;
+
+        let mut proc = Processor::new();
+        proc.registers[2] = 100;
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+    }
+
+    #[test]
+    // MOV R3, SP
+    fn inst_mov_rsp() {
+        let mut comp = components();
+        let r = ram(&mut comp);
+        let inst = isa::Instruction::MOV.mask().rx(3).lsb(1);
+        let _ = r.set(0, inst);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.rx = 3;
+        default.pc = 1;
+        default.sp = 100;
+        default.registers[3] = 100;
+
+        let mut proc = Processor::new();
+        proc.sp = 100;
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
+    }
+
+    #[test]
+    // MOV SP, R3
+    fn inst_mov_spr() {
+        let mut comp = components();
+        let r = ram(&mut comp);
+        let inst = isa::Instruction::MOV.mask().rx(3).rz(1).lsb(1);
+        let _ = r.set(0, inst);
+
+        let mut default = Processor::new();
+        default.instruction = isa::Instruction::get_instruction(inst).unwrap();
+        default.ir = inst;
+        default.rx = 3;
+        default.rz = 1;
+        default.pc = 1;
+        default.sp = 100;
+        default.registers[3] = 100;
+
+        let mut proc = Processor::new();
+        proc.registers[3] = 100;
+
+        let _ = proc.instruction_cicle(&mut comp);
+
+        assert_eq!(proc, default);
     }
 }
